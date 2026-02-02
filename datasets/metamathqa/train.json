@@ -1,0 +1,52 @@
+[
+    {
+        "instruction": "Please solve the following problem step by step. When you reach the answer, please output the answer after 'The answer is: ' at the end of the response.\n\nGracie and Joe are choosing numbers on the complex plane. Joe chooses the point $1+2i$. Gracie chooses $-1+i$. How far apart are Gracie and Joe's points?",
+        "input": "",
+        "output": "The distance between two points $(x_1,y_1)$ and $(x_2,y_2)$ in the complex plane is given by the formula $\\sqrt{(x_2-x_1)^2+(y_2-y_1)^2}$.\nIn this case, Joe's point is $(1,2)$ and Gracie's point is $(-1,1)$.\nSo the distance between their points is $\\sqrt{((-1)-(1))^2+((1)-(2))^2}=\\sqrt{(-2)^2+(-1)^2}=\\sqrt{4+1}=\\sqrt{5}$.\nTherefore, Gracie and Joe's points are $\\boxed{\\sqrt{5}}$ units apart.\nThe answer is: \\sqrt{5}"
+    },
+    {
+        "instruction": "Please solve the following problem step by step. When you reach the answer, please output the answer after 'The answer is: ' at the end of the response.\n\nWhat is the total cost of purchasing equipment for all sixteen players on the football team, considering that each player requires a $25 jersey, a $15.20 pair of shorts, and a pair of socks priced at $6.80?",
+        "input": "",
+        "output": "Each player requires a $25 jersey, a $15.20 pair of shorts, and a pair of socks priced at $6.80.\nSo the total cost for each player is $25 + $15.20 + $6.80 = $47.\nSince there are sixteen players on the football team, the total cost for all of them is 16 * $47 = $752.\n#### 752\nThe answer is: 752"
+    },
+    {
+        "instruction": "Please solve the following problem step by step. When you reach the answer, please output the answer after 'The answer is: ' at the end of the response.\n\nDiego baked 12 cakes for his sister's birthday. Donald also baked 4 cakes, but ate x while waiting for the party to start. There are 15 cakes left. What is the value of unknown variable x?",
+        "input": "",
+        "output": "To solve this problem, we need to determine the value of x, which represents the number of cakes Donald ate while waiting for the party to start.\nLet's break down the information given:\nNumber of cakes baked by Diego: 12\nNumber of cakes baked by Donald: 4\nNumber of cakes left: 15\nWe can set up the equation as follows:\nNumber of cakes baked by Diego + Number of cakes baked by Donald - Number of cakes eaten by Donald = Number of cakes left\n12 + 4 - x = 15\nLet's simplify and solve for x:\n16 - x = 15\nTo isolate x, we subtract 16 from both sides of the equation:\n16 - x - 16 = 15 - 16\n-x = -1\nFinally, we multiply both sides of the equation by -1 to solve for x:\nx = 1\nThe value of x is 1.\n#### 1\nThe answer is: 1"
+    },
+    {
+        "instruction": "Please solve the following problem step by step. When you reach the answer, please output the answer after 'The answer is: ' at the end of the response.\n\nConvert $10101_3$ to a base 10 integer.",
+        "input": "",
+        "output": "$10101_3 = 1 \\cdot 3^4 + 0 \\cdot 3^3 + 1 \\cdot 3^2 + 0 \\cdot 3^1 + 1 \\cdot 3^0 = 81 + 9 + 1 = \\boxed{91}$.\nThe answer is: 91"
+    },
+    {
+        "instruction": "Please solve the following problem step by step. When you reach the answer, please output the answer after 'The answer is: ' at the end of the response.\n\nSue works in a factory and every 30 minutes, a machine she oversees produces 30 cans of soda. How many cans of soda can x machine produce in 8 hours?\nIf we know the answer to the above question is 480, what is the value of unknown variable x?",
+        "input": "",
+        "output": "We know that every 30 minutes, a machine produces 30 cans of soda.\nSince there are 60 minutes in an hour, and 8 hours in total, the total number of minutes is 60 * 8 = 480 minutes.\nIf a machine produces 30 cans of soda every 30 minutes, then in 480 minutes, it will produce (480/30) * 30 = 480 cans of soda.\nWe are given that the total number of cans of soda produced is 480, so we can write: 480 = 480 * x.\nDividing both sides by 480, we get: x = 1.\nThe value of x is 1.\n#### 1\nThe answer is: 1"
+    },
+    {
+        "instruction": "Please solve the following problem step by step. When you reach the answer, please output the answer after 'The answer is: ' at the end of the response.\n\nMark is buying asphalt to pave a new section of road. The road will be 2000 feet long and 20 feet wide. Each truckload of asphalt will cover 800 square feet of road. If each truckload costs x, and there's a 20% sales tax, how much will Mark need to pay for asphalt?\nIf we know the answer to the above question is 4500, what is the value of unknown variable x?",
+        "input": "",
+        "output": "The area of the road is the length multiplied by the width: 2000 * 20 = 40,000 square feet.\nEach truckload of asphalt will cover 800 square feet of road, so Mark will need 40,000 / 800 = 50 truckloads of asphalt.\nThe cost of each truckload is x dollars.\nThe total cost of the asphalt without sales tax is 50 * x dollars.\nThe sales tax is 20% of the total cost, so the sales tax amount is 0.2 * (50 * x) = 10 * x dollars.\nThe total cost including sales tax is the sum of the cost without sales tax and the sales tax amount: 50 * x + 10 * x = 60 * x dollars.\nWe are given that the total cost is $4500, so we can write: 60 * x = $4500.\nDividing both sides by 60, we get: x = $75.\nThe value of x is $75.\n#### 75\nThe answer is: 75"
+    },
+    {
+        "instruction": "Please solve the following problem step by step. When you reach the answer, please output the answer after 'The answer is: ' at the end of the response.\n\nEvan’s dog weighs 63 pounds; it weighs x times as much as Ivan’s dog.  Together, what is the weight of the dogs?\nIf we know the answer to the above question is 72, what is the value of unknown variable x?",
+        "input": "",
+        "output": "We know that Evan's dog weighs 63 pounds.\nWe also know that Evan's dog weighs x times as much as Ivan's dog, which means Ivan's dog weighs 63/x pounds.\nThe total weight of the dogs is the sum of the weight of Evan's dog and the weight of Ivan's dog: 63 + 63/x.\nWe are given that the total weight of the dogs is 72 pounds, so we can write: 63 + 63/x = 72.\nSolving for x, we get: x = 7.\nThe value of x is 7.\n#### 7\nThe answer is: 7"
+    },
+    {
+        "instruction": "Please solve the following problem step by step. When you reach the answer, please output the answer after 'The answer is: ' at the end of the response.\n\nThe town of Belize has 400 homes. One fourth of the town's homes are white. One fifth of the non-white homes have a fireplace. How many of the non-white homes do not have a fireplace?",
+        "input": "",
+        "output": "One fourth of the town's homes are white, so there are 400/4 = 100 white homes.\nThe remaining non-white homes are 400 - 100 = 300 homes.\nOne fifth of the non-white homes have a fireplace, so there are 300/5 = 60 non-white homes with a fireplace.\nTherefore, the number of non-white homes without a fireplace is 300 - 60 = 240.\n#### 240\nThe answer is: 240"
+    },
+    {
+        "instruction": "Please solve the following problem step by step. When you reach the answer, please output the answer after 'The answer is: ' at the end of the response.\n\nQuantities $r$ and $s$ vary inversely. When $r$ is $1200,$ $s$ is $0.35.$ What is the value of $s$ when $r$ is $2400$? Express your answer as a decimal to the nearest thousandths.",
+        "input": "",
+        "output": "If $r$ and $s$ vary inversely, then we know that $r \\cdot s = k$ for some constant $k$.\nWe are given that when $r$ is $1200$, $s$ is $0.35$. So we can set up the equation:\n$1200 \\cdot 0.35 = k$\nSimplifying, we find that $k = 420$.\nNow we can use this value of $k$ to solve for $s$ when $r$ is $2400$:\n$2400 \\cdot s = 420$\nDividing both sides by $2400$, we find that $s = \\boxed{0.175}$ to the nearest thousandths.\nThe answer is: 0.175"
+    },
+    {
+        "instruction": "Please solve the following problem step by step. When you reach the answer, please output the answer after 'The answer is: ' at the end of the response.\n\nDave bought 8 books about animals, 6 books about outer space, and 3 books about trains to keep him busy over the holidays. Each book cost $6. How much did Dave spend on the books?",
+        "input": "",
+        "output": "Dave bought a total of 8 + 6 + 3 = 17 books.\nEach book cost $6, so Dave spent a total of 17 x $6 = $102 on the books.\n#### 102\nThe answer is: 102"
+    }
+]
