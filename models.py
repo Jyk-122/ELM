@@ -7,6 +7,55 @@ from convert_weights import hf_to_meta
 from transformers import AutoModelForCausalLM
 
 
+def LLMs_Lora(args, **kwargs):
+    from elm.model_lora import ModelArgs, Transformer
+
+    hf_model_path = args.hf_model_path
+    
+    model = AutoModelForCausalLM.from_pretrained(
+        hf_model_path,
+        torch_dtype='bfloat16',
+        low_cpu_mem_usage=True,
+        device_map='cpu',
+        trust_remote_code=True,
+    )
+    
+    converted_state_dict, converted_model_args = hf_to_meta(model.state_dict(), model.config)
+
+    if "Llama" in hf_model_path:
+        converted_model_args.update({"model_type": "llama"})
+    if "Qwen" in hf_model_path:
+        converted_model_args.update({"model_type": "qwen"})
+
+    model_args: ModelArgs = ModelArgs(
+        max_seq_len=args.max_seq_len,
+        max_batch_size=args.max_batch_size,
+        lora_rank=args.lora_rank,
+        lora_alpha=args.lora_alpha,
+        **converted_model_args
+    )
+    
+    print(model_args)
+
+    if torch.cuda.is_bf16_supported():
+        torch.set_default_tensor_type(torch.cuda.BFloat16Tensor)
+    else:
+        torch.set_default_tensor_type(torch.cuda.HalfTensor)
+    
+    model_lora = Transformer(model_args)
+    model_lora.load_state_dict(converted_state_dict, strict=False)
+
+    # only tune the lora module
+    for name, param in model_lora.named_parameters():
+        if "lora" in name:
+            param.requires_grad = True
+            param.data = param.data.float()
+        else:
+            param.requires_grad = False
+    
+    return model_lora
+
+
 def ELMs(args, **kwargs):
     from elm.model_elm import ModelArgs, Transformer
 

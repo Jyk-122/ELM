@@ -14,7 +14,7 @@ import torch.backends.cudnn as cudnn
 from torch.utils.data import Dataset
 from torch.utils.tensorboard import SummaryWriter
 
-from models import ELMs
+from models import LLMs_Lora
 from util.datasets import SupervisedDataset
 import util.lr_sched as lr_sched
 import util.misc as misc
@@ -22,7 +22,7 @@ from util.misc import NativeScalerWithGradNormCount as NativeScaler
 
 
 def get_args_parser():
-    parser = argparse.ArgumentParser("ELM finetuing", add_help=False)
+    parser = argparse.ArgumentParser("LLM LoRA finetuing", add_help=False)
     parser.add_argument("--batch_size", default=1, type=int, help="batch size per GPU (effective batch size is batch_size * accum_iter * # gpus")
     parser.add_argument("--epochs", default=10, type=int, help="epochs for training.")
     parser.add_argument("--start_epoch", default=0, type=int, help="start epoch")
@@ -36,15 +36,8 @@ def get_args_parser():
     parser.add_argument("--model_save_name", type=str, default="Llama_dynamic", help="folder name to save your models")
     parser.add_argument("--max_batch_size", type=int, default=32, help="the maximum sequence length")
     parser.add_argument("--max_seq_len", type=int, default=512, help="the maximum sequence length")
-    parser.add_argument("--prune_interval_start_layer", type=int, default=1, help="")
-    parser.add_argument("--prune_interval_layer_stats", type=str, default=None, help="")
-    parser.add_argument("--prune_interval_len", type=int, default=8, help="")
-    parser.add_argument("--lambda_lmloss", type=float, default=1, help="")
-    parser.add_argument("--lambda_distill", type=float, default=1, help="")
-    parser.add_argument("--fixed_point_wo_grad_min_iters", type=int, default=0, help="")
-    parser.add_argument("--fixed_point_wo_grad_max_iters", type=int, default=8, help="")
-    parser.add_argument("--fixed_point_with_grad_min_iters", type=int, default=1, help="")
-    parser.add_argument("--fixed_point_with_grad_max_iters", type=int, default=8, help="")
+    parser.add_argument("--lora_rank", type=int, default=8, help="the rank of the LoRA module")
+    parser.add_argument("--lora_alpha", type=float, default=16, help="the alpha of the LoRA module")
     
     # Optimizer parameters
     parser.add_argument("--weight_decay", type=float, default=0.05, help="weight decay (default: 0.05)")
@@ -104,16 +97,12 @@ def train_one_epoch(
     ):
         if data_iter_step % accum_iter == 0:
             lr_sched.adjust_learning_rate(optimizer, data_iter_step / len(data_loader) + epoch, args)
-            lambda_lmloss, lambda_distill = lr_sched.adjust_lambda(data_iter_step / len(data_loader) + epoch, args)
-            iter_info = lr_sched.adjust_iter_info(data_iter_step / len(data_loader) + epoch, args)
 
-        loss_dict = model(example, label, example_mask, label_mask, iter_info)
+        loss_dict = model(example, label, example_mask, label_mask)
         c_loss = loss_dict['c_loss']
-        d_loss = loss_dict['d_loss']
-        loss = lambda_lmloss * c_loss + lambda_distill * d_loss
+        loss = c_loss
         loss_value = loss.item()
         c_loss_value = c_loss.item()
-        d_loss_value = d_loss.item()
 
         if not math.isfinite(loss_value):
             with open(os.path.join(args.log_dir, "log.txt"), mode="a", encoding="utf-8") as f:
@@ -130,18 +119,13 @@ def train_one_epoch(
 
         lr = optimizer.param_groups[0]["lr"]
         metric_logger.update(closs=c_loss_value)
-        metric_logger.update(dloss=d_loss_value)
         metric_logger.update(lr=lr)
 
         c_loss_value_reduce = misc.all_reduce_mean(c_loss_value)
-        d_loss_value_reduce = misc.all_reduce_mean(d_loss_value)
 
         if log_writer is not None and (data_iter_step + 1) % accum_iter == 0:
             step = int(len(data_loader) * epoch + data_iter_step) // accum_iter
             log_writer.add_scalar("Train/c_loss", c_loss_value_reduce, step)
-            log_writer.add_scalar("Train/d_loss", d_loss_value_reduce, step)
-            log_writer.add_scalar("Train/lambda_lmloss", lambda_lmloss, step)
-            log_writer.add_scalar("Train/lambda_distill", lambda_distill, step)
             log_writer.add_scalar("Train/lr", lr, step)
 
     # gather the stats from all processes
@@ -210,7 +194,7 @@ def main(args):
     )
 
     # define the model
-    model = ELMs(args)
+    model = LLMs_Lora(args)
 
     if global_rank == 0:
         if args.output_dir:
