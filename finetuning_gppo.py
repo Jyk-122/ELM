@@ -9,7 +9,6 @@ import math
 from pathlib import Path
 from typing import Iterable
 import numpy as np
-import timm.optim.optim_factory as optim_factory
 import torch
 import torch.backends.cudnn as cudnn
 from torch.utils.data import Dataset
@@ -293,8 +292,6 @@ def main(args):
         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu], find_unused_parameters=True)
         model_without_ddp = model.module
 
-    # following timm: set wd as 0 for bias and norm layers
-    # param_groups = optim_factory.param_groups_weight_decay(model_without_ddp, args.weight_decay)
     param_group_policy = []
     param_group_reward = []
     for name, p in model_without_ddp.named_parameters():

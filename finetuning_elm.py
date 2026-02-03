@@ -9,7 +9,6 @@ import math
 from pathlib import Path
 from typing import Iterable
 import numpy as np
-import timm.optim.optim_factory as optim_factory
 import torch
 import torch.backends.cudnn as cudnn
 from torch.utils.data import Dataset
@@ -238,8 +237,19 @@ def main(args):
         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu], find_unused_parameters=True)
         model_without_ddp = model.module
 
-    # following timm: set wd as 0 for bias and norm layers
-    param_groups = optim_factory.param_groups_weight_decay(model_without_ddp, args.weight_decay)
+    # set wd as 0 for bias and norm layers
+    param_groups_with_decay = []
+    param_groups_wo_decay = []
+    for name, p in model_without_ddp.named_parameters():
+        if "norm" in name or "bias" in name:
+            param_groups_wo_decay.append(p)
+        else:
+            param_groups_with_decay.append(p)
+    param_groups = [
+        {'params': param_groups_with_decay, 'weight_decay': args.weight_decay},
+        {'params': param_groups_wo_decay, 'weight_decay': 0.}
+    ]
+    
     optimizer = torch.optim.AdamW(param_groups, lr=args.lr, betas=(0.9, 0.95))
     loss_scaler = NativeScaler()
 
