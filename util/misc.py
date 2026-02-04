@@ -321,6 +321,17 @@ def load_model(args, model_without_ddp, optimizer_list, loss_scaler):
         print("Resume checkpoint %s." % args.resume)
 
 
+def load_model_from_ds(args, model):
+    # Resume from DeepSpeed checkpoint (--resume should be path to checkpoint dir, e.g. .../ckpt/epoch_1)
+    if args.resume:
+        load_dir = os.path.dirname(args.resume.rstrip("/"))
+        tag = os.path.basename(args.resume.rstrip("/"))
+        model.load_checkpoint(load_dir, tag)
+        if tag.startswith("epoch_"):
+            args.start_epoch = int(tag.split("_")[1]) + 1
+        print("Resume DeepSpeed checkpoint %s (from epoch %s)." % (args.resume, tag))
+
+
 def all_reduce_mean(x):
     world_size = get_world_size()
     if world_size > 1:
