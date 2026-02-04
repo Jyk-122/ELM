@@ -192,11 +192,12 @@ class LoRA(nn.Module):
         
         self.scaling = float(r) / float(alpha)
         
-        nn.init.kaiming_uniform_(self.linear_A.weight)
-        nn.init.normal_(self.linear_B.weight)
+        nn.init.kaiming_uniform_(self.linear_A.weight, a=math.sqrt(5))
+        nn.init.zeros_(self.linear_B.weight)
         
     def forward(self, x: torch.Tensor):
-        return self.linear_B(self.linear_A(self.dropout(x))) * self.scaling
+        output = self.linear_B(self.linear_A(self.dropout(x.float()))) * self.scaling
+        return output.type_as(x)
         
 
 class Attention(nn.Module):
@@ -291,7 +292,7 @@ class Attention(nn.Module):
 
         output = torch.matmul(scores, values)  # (bs, n_local_heads, seqlen, head_dim)
         output = output.transpose(1, 2).contiguous().view(bsz, seqlen, -1)
-        return self.wo(output)
+        return self.wo(output) + self.lora_o(output)
 
 
 class FeedForward(nn.Module):
@@ -340,8 +341,10 @@ class FeedForward(nn.Module):
     def forward(self, x):
         h1 = self.w1(x) + self.lora_1(x)
         h3 = self.w3(x) + self.lora_3(x)
-        h2 = F.silu(h1 * h3)
-        return self.w2(h2) + self.lora_2(h2)
+        h2 = F.silu(h1) * h3
+        output = self.w2(h2) + self.lora_2(h2)
+        
+        return output
 
 
 class TransformerBlock(nn.Module):
@@ -493,6 +496,7 @@ class Transformer(nn.Module):
         output = self.output(h)
         output = output[:, :-1, :].reshape(-1, self.vocab_size)
         labels = labels[:, 1:].flatten()
+        
         c_loss = self.criterion(output, labels)
         
         return {'c_loss': c_loss}
