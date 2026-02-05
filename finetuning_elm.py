@@ -35,6 +35,7 @@ def get_args_parser():
     parser.add_argument("--accum_iter", default=1, type=int, help="accumulate gradient iterations (for increasing the effective batch size under memory constraints)")
     parser.add_argument("--print_freq", default=10, type=int, help="frequency of iterations to print logging infos")
     parser.add_argument("--save_freq", default=1, type=int, help="frequency of epochs to save checkpoints")
+    parser.add_argument("--save_full_checkpoint", action="store_true", help="Enable DeepSpeed checkpoint saving")
 
     # Model parameters
     parser.add_argument("--hf_model_path", default="./llama", type=str, help="path to llama model checkpoints")
@@ -115,9 +116,6 @@ def train_one_epoch(
     print_freq = args.print_freq
     accum_iter = args.accum_iter
 
-    if not getattr(args, "deepspeed", False):
-        optimizer.zero_grad()
-
     if log_writer is not None:
         print("log_dir: {}".format(log_writer.log_dir))
     for data_iter_step, (example, label, example_mask, label_mask) in enumerate(
@@ -128,6 +126,11 @@ def train_one_epoch(
             lambda_lmloss, lambda_distill = lr_sched.adjust_lambda(data_iter_step / len(data_loader) + epoch, args)
             iter_info = lr_sched.adjust_iter_info(data_iter_step / len(data_loader) + epoch, args)
 
+        example      = example.to(device, non_blocking=True)
+        label        = label.to(device, non_blocking=True)
+        example_mask = example_mask.to(device, non_blocking=True)
+        label_mask   = label_mask.to(device, non_blocking=True)
+        
         loss_dict = model(example, label, example_mask, label_mask, iter_info)
         c_loss = loss_dict['c_loss']
         d_loss = loss_dict['d_loss']
@@ -141,17 +144,10 @@ def train_one_epoch(
                 f.write("Loss is {} when training at example {}-{}.\n".format(loss_value, example, label))
             sys.exit(1)
 
-        if getattr(args, "deepspeed", False):
-            model.backward(loss)
-            if (data_iter_step + 1) % accum_iter == 0:
-                model.step()
-            lr = model.get_lr()[0]
-        else:
-            loss /= accum_iter
-            loss_scaler(loss, optimizer, clip_grad=args.clip_grad, parameters=model.parameters(), update_grad=(data_iter_step + 1) % accum_iter == 0)
-            if (data_iter_step + 1) % accum_iter == 0:
-                optimizer.zero_grad()
-            lr = optimizer.param_groups[0]["lr"]
+        model.backward(loss)
+        if (data_iter_step + 1) % accum_iter == 0:
+            model.step()
+        lr = model.get_lr()[0]
 
         torch.cuda.synchronize()
 
@@ -257,60 +253,32 @@ def main(args):
     print("accumulate grad iterations: %d" % args.accum_iter)
     print("effective batch size: %d" % eff_batch_size)
 
-    use_deepspeed = getattr(args, "deepspeed", False) and args.deepspeed_config
-    if use_deepspeed:
-        ds_config = _get_deepspeed_config(args)
-        # weight decay: 0 for norm/bias (same as current logic)
-        param_groups_with_decay = []
-        param_groups_wo_decay = []
-        for name, p in model.named_parameters():
-            if not p.requires_grad:
-                continue
-            if "norm" in name or "bias" in name:
-                param_groups_wo_decay.append(p)
-            else:
-                param_groups_with_decay.append(p)
-        param_groups = [
-            {"params": param_groups_with_decay, "weight_decay": args.weight_decay},
-            {"params": param_groups_wo_decay, "weight_decay": 0.0},
-        ]
-        optimizer = torch.optim.AdamW(param_groups, lr=args.lr, betas=(0.9, 0.95))
-        model_engine, optimizer, _, _ = deepspeed.initialize(
-            args=args,
-            model=model,
-            optimizer=optimizer,
-            config=ds_config,
-            model_parameters=model.parameters(),
-        )
-        model = model_engine
-        loss_scaler = None
-        
-        misc.load_model_from_ds(args, model)
-    else:
-        model.to(device)
-
-        if args.distributed:
-            model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu], find_unused_parameters=True)
-            model_without_ddp = model.module
-
-        # set wd as 0 for bias and norm layers
-        param_groups_with_decay = []
-        param_groups_wo_decay = []
-        for name, p in model_without_ddp.named_parameters():
-            if "norm" in name or "bias" in name:
-                param_groups_wo_decay.append(p)
-            else:
-                param_groups_with_decay.append(p)
-        
-        param_groups = [
-            {'params': param_groups_with_decay, 'weight_decay': args.weight_decay},
-            {'params': param_groups_wo_decay, 'weight_decay': 0.}
-        ]
-        
-        optimizer = torch.optim.AdamW(param_groups, lr=args.lr, betas=(0.9, 0.95))
-        loss_scaler = NativeScaler()
-
-        misc.load_model(args=args, model_without_ddp=model_without_ddp, optimizer_list=[optimizer], loss_scaler=loss_scaler)
+    ds_config = _get_deepspeed_config(args)
+    # weight decay: 0 for norm/bias (same as current logic)
+    param_groups_with_decay = []
+    param_groups_wo_decay = []
+    for name, p in model.named_parameters():
+        if not p.requires_grad:
+            continue
+        if "norm" in name or "bias" in name:
+            param_groups_wo_decay.append(p)
+        else:
+            param_groups_with_decay.append(p)
+    param_groups = [
+        {"params": param_groups_with_decay, "weight_decay": args.weight_decay},
+        {"params": param_groups_wo_decay, "weight_decay": 0.0},
+    ]
+    optimizer = torch.optim.AdamW(param_groups, lr=args.lr, betas=(0.9, 0.95))
+    model_engine, optimizer, _, _ = deepspeed.initialize(
+        model=model,
+        optimizer=optimizer,
+        config=ds_config,
+        model_parameters=model.parameters(),
+    )
+    model = model_engine
+    loss_scaler = None
+    
+    misc.load_model_from_ds(args, model)
 
     print(f"Training on {args.dataset_name} for {args.epochs} epochs, starts at epoch = {args.start_epoch}")
     start_time = time.time()
@@ -324,18 +292,19 @@ def main(args):
         )
 
         if args.ckpt_dir and ((epoch + 1) % (args.save_freq) == 0 or epoch + 1 == args.epochs):
-            if use_deepspeed:
-                tag = f"epoch_{epoch}"
+            tag = f"epoch_{epoch}"
+            os.makedirs(os.path.join(args.ckpt_dir, tag), exist_ok=True)
+            
+            if args.save_full_checkpoint:
                 model.save_checkpoint(args.ckpt_dir, tag, client_state={"epoch": epoch})
-            else:
-                misc.save_model(
-                    args=args,
-                    model=model,
-                    model_without_ddp=model_without_ddp,
-                    optimizer_list=[optimizer],
-                    loss_scaler=loss_scaler,
-                    epoch=epoch,
-                )
+            
+            misc.save_model(
+                args=args,
+                tag=tag,
+                epoch=epoch,
+                model=model,
+                model_without_ddp=model_without_ddp,
+            )
 
         log_stats = {
             **{f"train_{k}": v for k, v in train_stats.items()},

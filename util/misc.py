@@ -281,7 +281,24 @@ def get_grad_norm_(parameters, norm_type: float = 2.0) -> torch.Tensor:
     return total_norm
 
 
-def save_model(args, epoch, model, model_without_ddp, optimizer_list, loss_scaler):
+def save_model(args, tag, epoch, model, model_without_ddp):
+    output_dir = Path(args.ckpt_dir)
+
+    model_state_dict = model_without_ddp.state_dict()
+    model_save_state_dict = {}
+    for param_name, param in model_without_ddp.named_parameters():
+        if param.requires_grad:
+            model_save_state_dict.update({ param_name: model_state_dict[param_name] })
+
+    checkpoint_path = os.path.join(output_dir, tag, "trainable_weights.pt")
+    to_save = {
+        'epoch': epoch,
+        'model': model_save_state_dict,
+    }
+
+    save_on_master(to_save, checkpoint_path)
+
+def save_model_optim(args, epoch, model, model_without_ddp, optimizer_list, loss_scaler):
     output_dir = Path(args.ckpt_dir)
     epoch_name = str(epoch)
 
@@ -304,7 +321,6 @@ def save_model(args, epoch, model, model_without_ddp, optimizer_list, loss_scale
         }
 
         save_on_master(to_save, checkpoint_path)
-
 
 def load_model(args, model_without_ddp, optimizer_list, loss_scaler):
     if args.resume:

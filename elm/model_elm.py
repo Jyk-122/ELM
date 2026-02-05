@@ -567,8 +567,7 @@ class Transformer(nn.Module):
             h = self.layers[i](h, start_pos, freqs_cis, mask)
         
         h_input = h.clone()
-        h_output = self.prune_interval_replace_module(h_input.float(), start_pos, freqs_cis, mask, iter_info)
-        h_output = h_output.type_as(h)
+        h_output = self.prune_interval_replace_module(h_input, start_pos, freqs_cis, mask, iter_info)
         
         for i in prune_layer_id:
             h = self.layers[i](h, start_pos, freqs_cis, mask)

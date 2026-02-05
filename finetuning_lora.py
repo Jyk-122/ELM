@@ -252,7 +252,7 @@ def main(args):
         )
 
         if args.ckpt_dir and ((epoch + 1) % (args.save_freq) == 0 or epoch + 1 == args.epochs):
-            misc.save_model(
+            misc.save_model_optim(
                 args=args,
                 model=model,
                 model_without_ddp=model_without_ddp,

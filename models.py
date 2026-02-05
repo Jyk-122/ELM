@@ -49,7 +49,6 @@ def LLMs_Lora(args, **kwargs):
     for name, param in model_lora.named_parameters():
         if "lora" in name:
             param.requires_grad = True
-            param.data = param.data.float()
         else:
             param.requires_grad = False
     
@@ -133,7 +132,6 @@ def ELMs(args, **kwargs):
     for name, param in model_elm.named_parameters():
         if "prune_interval" in name:
             param.requires_grad = True
-            param.data = param.data.float()
         else:
             param.requires_grad = False
     
