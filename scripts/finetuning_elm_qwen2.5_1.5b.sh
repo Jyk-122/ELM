@@ -8,6 +8,8 @@ OUTPUT_PATH=./output
 
 
 torchrun --nproc_per_node 8 --master_port 9600 finetuning.py \
+    --deepspeed \
+    --deepspeed_config scripts/ds_config.json \
     --model_save_name Qwen2.5-1.5B-Instruct-ELM-Prune8 \
     --hf_model_path $MODEL_PATH \
     --lora_model_path $LORA_PATH/metamathqa/path/to/ckpt/checkpoint-2.pth \

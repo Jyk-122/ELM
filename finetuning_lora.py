@@ -13,6 +13,7 @@ import torch
 import torch.backends.cudnn as cudnn
 from torch.utils.data import Dataset
 from torch.utils.tensorboard import SummaryWriter
+import deepspeed
 
 from models import LLMs_Lora
 from util.datasets import SupervisedDataset
@@ -23,12 +24,18 @@ from util.misc import NativeScalerWithGradNormCount as NativeScaler
 
 def get_args_parser():
     parser = argparse.ArgumentParser("LLM LoRA finetuing", add_help=False)
+    # DeepSpeed parameters
+    parser.add_argument("--deepspeed", action="store_true", help="Enable DeepSpeed ZeRO-2")
+    parser.add_argument("--deepspeed_config", type=str, default="", help="Path to DeepSpeed config JSON")
+    
+    # Training parameters
     parser.add_argument("--batch_size", default=1, type=int, help="batch size per GPU (effective batch size is batch_size * accum_iter * # gpus")
     parser.add_argument("--epochs", default=10, type=int, help="epochs for training.")
     parser.add_argument("--start_epoch", default=0, type=int, help="start epoch")
     parser.add_argument("--accum_iter", default=1, type=int, help="accumulate gradient iterations (for increasing the effective batch size under memory constraints)")
     parser.add_argument("--print_freq", default=10, type=int, help="frequency of iterations to print logging infos")
     parser.add_argument("--save_freq", default=1, type=int, help="frequency of epochs to save checkpoints")
+    parser.add_argument("--save_full_checkpoint", action="store_true", help="Enable DeepSpeed checkpoint saving")
 
     # Model parameters
     parser.add_argument("--hf_model_path", default="./llama", type=str, help="path to llama model checkpoints")
@@ -71,6 +78,20 @@ def get_args_parser():
     return parser
 
 
+def _get_deepspeed_config(args):
+    with open(args.deepspeed_config, "r") as f:
+        ds_config = json.load(f)
+    world_size = misc.get_world_size()
+    # Replace "auto" with actual values
+    if ds_config.get("train_batch_size") == "auto":
+        ds_config["train_batch_size"] = args.batch_size * args.accum_iter * world_size
+    if ds_config.get("train_micro_batch_size_per_gpu") == "auto":
+        ds_config["train_micro_batch_size_per_gpu"] = args.batch_size
+    if ds_config.get("gradient_accumulation_steps") == "auto":
+        ds_config["gradient_accumulation_steps"] = args.accum_iter
+    return ds_config
+
+
 def train_one_epoch(
     model: torch.nn.Module,
     data_loader: Iterable,
@@ -88,8 +109,6 @@ def train_one_epoch(
     print_freq = args.print_freq
     accum_iter = args.accum_iter
 
-    optimizer.zero_grad()
-
     if log_writer is not None:
         print("log_dir: {}".format(log_writer.log_dir))
     for data_iter_step, (example, label, example_mask, label_mask) in enumerate(
@@ -98,6 +117,11 @@ def train_one_epoch(
         if data_iter_step % accum_iter == 0:
             lr_sched.adjust_learning_rate(optimizer, data_iter_step / len(data_loader) + epoch, args)
 
+        example      = example.to(device, non_blocking=True)
+        label        = label.to(device, non_blocking=True)
+        example_mask = example_mask.to(device, non_blocking=True)
+        label_mask   = label_mask.to(device, non_blocking=True)
+        
         loss_dict = model(example, label, example_mask, label_mask)
         c_loss = loss_dict['c_loss']
         loss = c_loss
@@ -109,15 +133,13 @@ def train_one_epoch(
                 f.write("Loss is {} when training at example {}-{}.\n".format(loss_value, example, label))
             sys.exit(1)
 
-        loss /= accum_iter
-
-        loss_scaler(loss, optimizer, clip_grad=args.clip_grad, parameters=model.parameters(), update_grad=(data_iter_step + 1) % accum_iter == 0)
+        model.backward(loss)
         if (data_iter_step + 1) % accum_iter == 0:
-            optimizer.zero_grad()
+            model.step()
+        lr = model.get_lr()[0]
 
         torch.cuda.synchronize()
 
-        lr = optimizer.param_groups[0]["lr"]
         metric_logger.update(closs=c_loss_value)
         metric_logger.update(lr=lr)
 
@@ -201,8 +223,6 @@ def main(args):
             with open(os.path.join(args.output_dir, "model_args.json"), "w") as f:
                 json.dump(vars(model.params), f, indent=4)
 
-    model.to(device)
-
     model_without_ddp = model
     print("Model = %s" % str(model_without_ddp))
 
@@ -217,29 +237,32 @@ def main(args):
     print("accumulate grad iterations: %d" % args.accum_iter)
     print("effective batch size: %d" % eff_batch_size)
 
-    if args.distributed:
-        model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu], find_unused_parameters=True)
-        model_without_ddp = model.module
-
-    # set wd as 0 for bias and norm layers
+    ds_config = _get_deepspeed_config(args)
+    # weight decay: 0 for norm/bias (same as current logic)
     param_groups_with_decay = []
     param_groups_wo_decay = []
-    for name, p in model_without_ddp.named_parameters():
+    for name, p in model.named_parameters():
+        if not p.requires_grad:
+            continue
         if "norm" in name or "bias" in name:
             param_groups_wo_decay.append(p)
         else:
             param_groups_with_decay.append(p)
-    
     param_groups = [
-        {'params': param_groups_with_decay, 'weight_decay': args.weight_decay},
-        {'params': param_groups_wo_decay, 'weight_decay': 0.}
+        {"params": param_groups_with_decay, "weight_decay": args.weight_decay},
+        {"params": param_groups_wo_decay, "weight_decay": 0.0},
     ]
-    
     optimizer = torch.optim.AdamW(param_groups, lr=args.lr, betas=(0.9, 0.95))
-    loss_scaler = NativeScaler()
-
-    misc.load_model(args=args, model_without_ddp=model_without_ddp, optimizer_list=[optimizer], loss_scaler=loss_scaler)
-
+    model_engine, optimizer, _, _ = deepspeed.initialize(
+        model=model,
+        optimizer=optimizer,
+        config=ds_config,
+        model_parameters=model.parameters(),
+    )
+    model = model_engine
+    loss_scaler = None
+    
+    misc.load_model_from_ds(args, model)
     print(f"Training on {args.dataset_name} for {args.epochs} epochs, starts at epoch = {args.start_epoch}")
     start_time = time.time()
     for epoch in range(args.start_epoch, args.epochs):
@@ -252,13 +275,18 @@ def main(args):
         )
 
         if args.ckpt_dir and ((epoch + 1) % (args.save_freq) == 0 or epoch + 1 == args.epochs):
-            misc.save_model_optim(
+            tag = f"epoch_{epoch}"
+            os.makedirs(os.path.join(args.ckpt_dir, tag), exist_ok=True)
+            
+            if args.save_full_checkpoint:
+                model.save_checkpoint(args.ckpt_dir, tag, client_state={"epoch": epoch})
+            
+            misc.save_model(
                 args=args,
+                tag=tag,
+                epoch=epoch,
                 model=model,
                 model_without_ddp=model_without_ddp,
-                optimizer_list=[optimizer],
-                loss_scaler=loss_scaler,
-                epoch=epoch,
             )
 
         log_stats = {

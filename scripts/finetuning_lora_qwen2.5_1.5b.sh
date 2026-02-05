@@ -7,6 +7,8 @@ OUTPUT_PATH=./output
 
 
 torchrun --nproc_per_node 8 --master_port 9600 finetuning_lora.py \
+    --deepspeed \
+    --deepspeed_config scripts/ds_config.json \
     --model_save_name Qwen2.5-1.5B-Instruct-Lora \
     --hf_model_path $MODEL_PATH \
     --dataset_path $DATASET_PATH \

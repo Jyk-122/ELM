@@ -196,8 +196,8 @@ class LoRA(nn.Module):
         nn.init.zeros_(self.linear_B.weight)
         
     def forward(self, x: torch.Tensor):
-        output = self.linear_B(self.linear_A(self.dropout(x.float()))) * self.scaling
-        return output.type_as(x)
+        output = self.linear_B(self.linear_A(self.dropout(x)))
+        return output * self.scaling
         
 
 class Attention(nn.Module):
