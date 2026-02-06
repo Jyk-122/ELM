@@ -11,6 +11,13 @@ To install requirements:
 pip install -r requirements.txt
 ```
 
+We use `bigcode-evaluation-harness` to evaluate code synthesis tasks:
+```setup
+git clone https://github.com/bigcode-project/bigcode-evaluation-harness.git
+cd bigcode-evaluation-harness
+pip install -e .
+```
+
 ## Datasets
 We recommend the following form to organize datasets:
 ```datasets_form
@@ -28,14 +35,35 @@ Here we provide mathematical reasoning datasets for reference. As illustrated in
 
 ## Training
 
+### LoRA
+We use lora finetuning for specific tasks to output target format. Set corresponding path in scripts and run
+```bash
+bash scripts/finetuning_lora_qwen2.5_1.5b.sh
+```
 
+### ELM
+Based on trained lora weights, we can compress the LLMs into our proposed ELMs through replacing layer groups as a single fixed-point transformer layer:
+```bash
+bash scripts/finetuning_elm_qwen2.5_1.5b.sh
+```
+
+### GPPO
+The interval of replaced layer groups has significant influence on the performance of ELMs. We propose GPPO search algorithm to automatically produce the probability of the best start of layer given the number of layers to be pruned.
+```bash
+bash scripts/finetuning_gppo_qwen2.5_1.5b.sh
+``` 
 
 ## Evaluation
-
+We provide evaluation in `evaluate.py` and an example script as:
+```bash
+bash scripts/eval_elm_math_qwen2.5_1.5b.sh
+```
 
 
 ## Inference
-
+For better adapation, we provide a simple implementation of ELM for inference with `transformers`.
+- Use `convert_to_hf.py` to transform trained weights saved by our training framework into an integrated ELM safetensor.
+- Use `infer.py` to run example inference.
 
 
 ## Results

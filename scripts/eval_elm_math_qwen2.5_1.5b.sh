@@ -6,7 +6,7 @@ HF_MODEL_PATH=/data1/jiangyikun/models/Qwen2.5-1.5B-Instruct
 LORA_PATH=/data1/jiangyikun/ELMs/Lora/output
 MASTER_PORT=9811
 
-torchrun --nproc_per_node 1 --master_port $MASTER_PORT $PROJECT_PATH/eval.py \
+torchrun --nproc_per_node 1 --master_port $MASTER_PORT $PROJECT_PATH/evaluate.py \
     --dataset_name math \
     --dataset_path $PROJECT_PATH/../datasets/math \
     --hf_model_path $HF_MODEL_PATH \
