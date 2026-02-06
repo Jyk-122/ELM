@@ -33,6 +33,7 @@ class ModelArgs:
     max_seq_len: int = 2048
 
     lora_rank: int = 16
+    lora_alpha: float = 16
     prune_interval_start_layer: int = 1
     prune_interval_len: int = 8
 
@@ -174,33 +175,31 @@ def repeat_kv(x: torch.Tensor, n_rep: int) -> torch.Tensor:
     )
 
 
-class LoRAModule(nn.Module):
-    def __init__(self, in_dim : int, rank : int, out_dim : int):
-        """
-        Initialize the LoRA module.
-
-        Args:
-            in_dim (int): Dim of input feature.
-            rank (int): Dim of hidden layer.
-            out_dim (int): Dim of output tensor.
-
-        Attributes:
-            linear_A (Linear): Linear transformation A for rank reduction.
-            linear_B (Linear): Linear transformation B for rank up.
-            dropout (nn.Dropout): Droupout layer.
-
-        """
+class LoRA(nn.Module):
+    def __init__(
+        self, 
+        r: int, 
+        alpha: float, 
+        in_dim: int, 
+        out_dim: int,
+        dropout: float = 0.05
+    ) -> None:
         super().__init__()
-        self.linear_A = nn.Linear(in_dim, rank, bias=False)
-        self.linear_B = nn.Linear(rank, out_dim, bias=False)
-        self.dropout = nn.Dropout(0.05)
+        self.r = r
+        self.alpha = alpha
 
-        nn.init.normal_(self.linear_A.weight, std=1 / rank)
+        self.linear_A = nn.Linear(in_dim, r, bias=False)
+        self.linear_B = nn.Linear(r, out_dim, bias=False)
+        self.dropout = nn.Dropout(p=dropout)
+        
+        self.scaling = float(r) / float(alpha)
+        
+        nn.init.kaiming_uniform_(self.linear_A.weight, a=math.sqrt(5))
         nn.init.zeros_(self.linear_B.weight)
-    
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = self.linear_B(self.linear_A(x.float()))
-        return self.dropout(x).bfloat16()
+        
+    def forward(self, x: torch.Tensor):
+        output = self.linear_B(self.linear_A(self.dropout(x)))
+        return output * self.scaling
     
 
 class Attention(nn.Module):
@@ -241,10 +240,10 @@ class Attention(nn.Module):
         self.wv = Linear(args.dim, self.n_kv_heads * self.head_dim, bias=bias)
         self.wo = Linear(args.n_heads * self.head_dim, args.dim, bias=False)
         
-        self.lora_q = LoRAModule(in_dim=args.dim, rank=args.lora_rank, out_dim=self.head_dim * self.n_local_heads)
-        self.lora_k = LoRAModule(in_dim=args.dim, rank=args.lora_rank, out_dim=self.head_dim * self.n_local_kv_heads)
-        self.lora_v = LoRAModule(in_dim=args.dim, rank=args.lora_rank, out_dim=self.head_dim * self.n_local_kv_heads)
-        self.lora_o = LoRAModule(in_dim=args.n_heads * self.head_dim, rank=args.lora_rank, out_dim=args.dim)
+        self.lora_q = LoRA(r=args.lora_rank, alpha=args.lora_alpha, in_dim=args.dim, out_dim=self.head_dim * self.n_local_heads)
+        self.lora_k = LoRA(r=args.lora_rank, alpha=args.lora_alpha, in_dim=args.dim, out_dim=self.head_dim * self.n_local_kv_heads)
+        self.lora_v = LoRA(r=args.lora_rank, alpha=args.lora_alpha, in_dim=args.dim, out_dim=self.head_dim * self.n_local_kv_heads)
+        self.lora_o = LoRA(r=args.lora_rank, alpha=args.lora_alpha, in_dim=args.n_heads * self.head_dim, out_dim=args.dim)
 
     def forward(
         self,
@@ -348,9 +347,9 @@ class FeedForward(nn.Module):
         self.w2 = Linear(hidden_dim, dim, bias=False)
         self.w3 = Linear(dim, hidden_dim, bias=False)
         
-        self.lora_1 = LoRAModule(dim, args.lora_rank, hidden_dim)
-        self.lora_2 = LoRAModule(hidden_dim, args.lora_rank, dim)
-        self.lora_3 = LoRAModule(dim, args.lora_rank, hidden_dim)
+        self.lora_1 = LoRA(r=args.lora_rank, alpha=args.lora_alpha, in_dim=dim, out_dim=hidden_dim)
+        self.lora_2 = LoRA(r=args.lora_rank, alpha=args.lora_alpha, in_dim=hidden_dim, out_dim=dim)
+        self.lora_3 = LoRA(r=args.lora_rank, alpha=args.lora_alpha, in_dim=dim, out_dim=hidden_dim)
 
     def forward(self, x, lora_apply: bool = False):
         """
@@ -367,7 +366,7 @@ class FeedForward(nn.Module):
         if lora_apply:
             w1 = self.w1(x) + self.lora_1(x)
             w3 = self.w3(x) + self.lora_3(x)
-            h = F.silu(w1 * w3)
+            h = F.silu(w1) * w3
             return self.w2(h) + self.lora_2(h)
         else:
             return self.w2(F.silu(self.w1(x)) * self.w3(x))
@@ -470,8 +469,8 @@ class Adaptor(nn.Module):
             torch.Tensor: Fused tensor after adptor.
 
         """
-        h = torch.cat([z, x], dim=-1).float()
-        return self.proj(h).type_as(x)
+        h = torch.cat([z, x], dim=-1)
+        return self.proj(h)
 
 
 class Transformer(nn.Module):

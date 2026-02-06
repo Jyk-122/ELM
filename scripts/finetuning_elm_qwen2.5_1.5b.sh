@@ -7,7 +7,7 @@ DATASET_PATH=../datasets
 OUTPUT_PATH=./output
 
 
-torchrun --nproc_per_node 8 --master_port 9600 finetuning.py \
+torchrun --nproc_per_node 8 --master_port 9600 finetuning_elm.py \
     --deepspeed \
     --deepspeed_config scripts/ds_config.json \
     --model_save_name Qwen2.5-1.5B-Instruct-ELM-Prune8 \
