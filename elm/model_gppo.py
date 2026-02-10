@@ -469,8 +469,8 @@ class Adaptor(nn.Module):
             torch.Tensor: Fused tensor after adptor.
 
         """
-        h = torch.cat([z, x], dim=-1)
-        return self.proj(h)
+        h = torch.cat([z, x], dim=-1).float()
+        return self.proj(h).type_as(x)
 
 
 class Transformer(nn.Module):
